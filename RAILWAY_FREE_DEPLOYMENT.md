@@ -8,12 +8,14 @@ Bu rehber, Grafana'yı Railway'in ücretsiz planında nasıl deploy edeceğinizi
 1. External datasource'lar (Prometheus, InfluxDB, MySQL) mevcut değildi
 2. Healthcheck timeout'u çok kısaydı
 3. curl komutu container'da yüklü değildi
+4. Provisioning dosyaları startup'ı yavaşlatıyordu
 
 **Çözüm:** 
-- TestData datasource kullanarak standalone Grafana
-- Artırılmış healthcheck timeout
+- En basit Grafana konfigürasyonu (Dockerfile.simple)
+- Healthcheck path'i "/" olarak değiştirildi
+- Artırılmış healthcheck timeout (300 saniye)
 - curl yüklü Dockerfile
-- Basit sample dashboard
+- Minimal konfigürasyon
 
 ## Railway'de Deploy Etme
 
