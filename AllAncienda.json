@@ -1,0 +1,3247 @@
+{
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 2,
+    "links": [],
+    "panels": [
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 7,
+          "x": 0,
+          "y": 0
+        },
+        "id": 35,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^Ancienda Total USD price$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "C",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "D",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$A+$B+$C+$D",
+            "hide": false,
+            "refId": "Ancienda Total USD price",
+            "type": "math"
+          }
+        ],
+        "title": "Ancienda Total Price",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "light-blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 7,
+          "x": 7,
+          "y": 0
+        },
+        "id": 36,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^E$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "WITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük $ae_first_open event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük $ae_first_open event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "WITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük $ae_first_open event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "C",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "WITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük $ae_first_open event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "D",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$A+$B+$C+$D",
+            "hide": false,
+            "refId": "E",
+            "type": "math"
+          }
+        ],
+        "title": "Ancienda TotalFirst App Open",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "light-purple"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 9,
+          "x": 14,
+          "y": 0
+        },
+        "id": 37,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^Ancienda Total USD price$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Daily Subscription Renewal COUNT\r\n-- 'subscription_renewed' etkinliğinin günlük sayısını gösterir\r\n\r\nWITH daily_counts AS (\r\n  -- Her gün için 'subscription_renewed' olayının sayısını hesapla\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS daily_renewal_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'subscription_renewed'\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT\r\n  -- Zaman damgasını formatla\r\n  CASE\r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dc.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59)))\r\n  END AS time,\r\n  \r\n  -- Günlük yenilenme sayısını göster (eğer veri yoksa 0)\r\n  COALESCE(dc.daily_renewal_count, 0) AS total_daily_renewals\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_counts dc ON adr.day = dc.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Daily Subscription Renewal COUNT\r\n-- 'subscription_renewed' etkinliğinin günlük sayısını gösterir\r\n\r\nWITH daily_counts AS (\r\n  -- Her gün için 'subscription_renewed' olayının sayısını hesapla\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS daily_renewal_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'subscription_renewed'\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT\r\n  -- Zaman damgasını formatla\r\n  CASE\r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dc.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59)))\r\n  END AS time,\r\n  \r\n  -- Günlük yenilenme sayısını göster (eğer veri yoksa 0)\r\n  COALESCE(dc.daily_renewal_count, 0) AS total_daily_renewals\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_counts dc ON adr.day = dc.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Daily Subscription Renewal COUNT\r\n-- 'subscription_renewed' etkinliğinin günlük sayısını gösterir\r\n\r\nWITH daily_counts AS (\r\n  -- Her gün için 'subscription_renewed' olayının sayısını hesapla\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS daily_renewal_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'subscription_renewed'\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT\r\n  -- Zaman damgasını formatla\r\n  CASE\r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dc.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59)))\r\n  END AS time,\r\n  \r\n  -- Günlük yenilenme sayısını göster (eğer veri yoksa 0)\r\n  COALESCE(dc.daily_renewal_count, 0) AS total_daily_renewals\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_counts dc ON adr.day = dc.event_date\r\nORDER BY time ASC;",
+            "refId": "C",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Daily Subscription Renewal COUNT\r\n-- 'subscription_renewed' etkinliğinin günlük sayısını gösterir\r\n\r\nWITH daily_counts AS (\r\n  -- Her gün için 'subscription_renewed' olayının sayısını hesapla\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS daily_renewal_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'subscription_renewed'\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT\r\n  -- Zaman damgasını formatla\r\n  CASE\r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dc.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59)))\r\n  END AS time,\r\n  \r\n  -- Günlük yenilenme sayısını göster (eğer veri yoksa 0)\r\n  COALESCE(dc.daily_renewal_count, 0) AS total_daily_renewals\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_counts dc ON adr.day = dc.event_date\r\nORDER BY time ASC;",
+            "refId": "D",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$A+$B+$C+$D",
+            "hide": false,
+            "refId": "Ancienda Total USD price",
+            "type": "math"
+          }
+        ],
+        "title": "Ancienda Total MRR",
+        "type": "stat"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 5
+        },
+        "id": 7,
+        "panels": [],
+        "title": "Focus",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 0,
+          "y": 6
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_focus.mp_master_event`\r\nWHERE $__timeFilter(time)\r\n  AND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalFirstOpen",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 4,
+          "y": 6
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^total_daily_revenue$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalRevenueUsd",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "purple"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 8,
+          "y": 6
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^C$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_focus.mp_master_event`\r\nWHERE $__timeFilter(time)\r\nAND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$B/$A",
+            "hide": false,
+            "refId": "C",
+            "type": "math"
+          }
+        ],
+        "title": "İndirme Başına Gelir",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds",
+              "seriesBy": "last"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "left",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 81,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineStyle": {
+                "fill": "solid"
+              },
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#6c35f1"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 6
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": false
+          },
+          "tooltip": {
+            "hideZeros": true,
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "-- Daily Generated Photos with Guaranteed Zeros for Grafana (Detailed Logic, FIXED)\r\n-- Bu sorgu, Grafana'da seçilen aralıktaki TÜM günler için (detaylı kurallarla) oluşturulan fotoğraf sayısını hesaplar.\r\n-- Fotoğraf oluşturulmayan günler için 0 döndürmeyi garanti eder.\r\n\r\nWITH\r\n-- 1. Adım: Grafana'da seçilen zaman aralığındaki tüm günleri oluştur.\r\nall_days_in_range AS (\r\n  SELECT\r\n    day\r\n  FROM\r\n    UNNEST(\r\n      GENERATE_DATE_ARRAY(\r\n        -- Güvenilir global değişkenler kullanılıyor\r\n        DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n        DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n      )\r\n    ) AS day\r\n),\r\n\r\n-- 2. Adım: Sadece fotoğraf oluşturulan günleri (yeni, detaylı kurallarla) verimli bir şekilde hesapla.\r\ndaily_generated_photos AS (\r\n  SELECT\r\n    DATE(time) AS event_date,\r\n    COUNT(*) AS photo_count\r\n  FROM\r\n    `sceneme-5e508.mixpanel_focus.mp_master_event`\r\n  WHERE\r\n    $__timeFilter(time) -- Grafana zaman filtresini uygula\r\n    AND (\r\n      (event_name = 'page_view' \r\n       AND JSON_EXTRACT_SCALAR(properties, '$.page_name') = 'generatedPhoto')\r\n    )\r\n  GROUP BY\r\n    event_date\r\n)\r\n\r\n-- 3. Adım: Oluşturulan tüm günleri, fotoğraf verileriyle birleştir.\r\nSELECT\r\n  TIMESTAMP(adr.day) AS time, -- Grafana için TIMESTAMP formatında\r\n  COALESCE(dgp.photo_count, 0) AS metric -- Eğer fotoğraf yoksa (NULL ise), 0 olarak göster\r\nFROM\r\n  all_days_in_range adr\r\nLEFT JOIN\r\n  daily_generated_photos dgp ON adr.day = dgp.event_date\r\nORDER BY\r\n  time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "PhotoGenerate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-green",
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 0,
+          "y": 9
+        },
+        "id": 1,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "normal",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Revenue",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#3888ff",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 6,
+          "y": 9
+        },
+        "id": 15,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutetiwh91cd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "sceneme-5e508",
+            "rawQuery": true,
+            "rawSql": "-- �� $ae_first_app_open_date Analysis Query for Grafana (Real-time)\r\n-- Bugün için anlık, diğer günler için günlük toplam\r\n\r\nWITH all_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_focus.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\nSELECT \r\n  -- Bugün için gerçek zaman, diğer günler için 23:59:59\r\n  CASE \r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dfo.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59)))\r\n  END AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "FirstAppOpen",
+        "type": "barchart"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 14
+        },
+        "id": 8,
+        "panels": [],
+        "title": "Deco",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 0,
+          "y": 15
+        },
+        "id": 9,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_deco.mp_master_event`\r\nWHERE $__timeFilter(time)\r\n  AND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalFirstOpen",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 4,
+          "y": 15
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^total_daily_revenue$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalRevenueUsd",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "purple"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 8,
+          "y": 15
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^C$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_deco.mp_master_event`\r\nWHERE $__timeFilter(time)\r\nAND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$B/$A",
+            "hide": false,
+            "refId": "C",
+            "type": "math"
+          }
+        ],
+        "title": "İndirme Başına Gelir",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds",
+              "seriesBy": "last"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "left",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 81,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineStyle": {
+                "fill": "solid"
+              },
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#6c35f1"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 15
+        },
+        "id": 27,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": false
+          },
+          "tooltip": {
+            "hideZeros": true,
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Günlük GeneratedPhoto Sayıları Sorgusu\n-- Grafana BigQuery SQL Kurallarına Uygun\n\nWITH all_days_in_range AS (\n  SELECT day FROM UNNEST(\n    GENERATE_DATE_ARRAY(\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\n    )\n  ) AS day\n),\ndaily_generated_photos AS (\n  SELECT \n    DATE(time) AS event_date,\n    COUNT(*) AS generated_photo_count\n  FROM `mixpanel_deco.mp_master_event`  -- Tablo adınızı buraya yazın\n  WHERE $__timeFilter(time)\n    AND event_name = 'page_view'\n    AND JSON_EXTRACT_SCALAR(properties, '$.page_name') = 'generatedPhoto'\n    OR JSON_EXTRACT_SCALAR(properties, '$.page_name') = 'resultPage'\n  GROUP BY event_date\n)\nSELECT \n  TIMESTAMP(adr.day) AS time,\n  COALESCE(dgp.generated_photo_count, 0) AS generated_photos\nFROM all_days_in_range adr\nLEFT JOIN daily_generated_photos dgp ON adr.day = dgp.event_date\nORDER BY time ASC;\n",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "PhotoGenerate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 0,
+          "y": 18
+        },
+        "id": 13,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "normal",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "multi",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Revenue",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#3888ff",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 6,
+          "y": 18
+        },
+        "id": 16,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexuss42e8b28a"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "-- Bugün için anlık, diğer günler için günlük toplam\r\n\r\nWITH all_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_deco.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\nSELECT\r\n  -- Bugün için gerçek zaman, diğer günler için 23:59:59\r\n  CASE\r\n    WHEN adr.day = CURRENT_DATE() THEN COALESCE(dfo.last_event_time, TIMESTAMP(DATETIME(adr.day, TIME(12, 0, 0))))\r\n    ELSE TIMESTAMP(DATETIME(adr.day, TIME(20, 59, 59))) -- Geçmiş günler için 23:59:59 olarak ayarlandı\r\n  END AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "FirstAppOpen",
+        "type": "barchart"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 18,
+        "panels": [],
+        "title": "Scenarios",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 0,
+          "y": 24
+        },
+        "id": 24,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "dataset": "mixpanel_scenarios",
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  COUNT(*) AS total_downloads\nFROM `mixpanel_scenarios.mp_master_event`\nWHERE $__timeFilter(time)\n  AND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [
+                    {
+                      "name": "user_id",
+                      "type": "functionParameter"
+                    }
+                  ],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            },
+            "table": "mp_master_event"
+          }
+        ],
+        "title": "TotalFirstOpen",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "description": "",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 4,
+          "y": 24
+        },
+        "id": 25,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^total_net_revenue_usd$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- RevenueCat event'leri için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name IN ('rc_initial_purchase_event', 'rc_trial_converted_event')\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64) > 0\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_revenuecat_total,\r\n    \r\n    -- RevenueCat event'lerinin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name IN ('rc_initial_purchase_event', 'rc_trial_converted_event')\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64) > 0\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_revenuecat_count,\r\n\r\n    -- Subscription started event'leri için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Subscription started event'lerinin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Subscription renewed event'leri için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Subscription renewed event'lerinin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- Refund event'leri için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- Refund event'lerinin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN (\r\n      'rc_initial_purchase_event', \r\n      'rc_trial_converted_event',\r\n      'subscription_started', \r\n      'subscription_renewed', \r\n      'subscription_renewal_cancelled', \r\n      'subscription_refunded'\r\n    )\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  -- Toplam günlük gelir (RevenueCat + Subscription events - Refunds)\r\n  ROUND(\r\n    COALESCE(dt.daily_revenuecat_total, 0) + \r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n  \r\n  -- RevenueCat gelirleri\r\n  --COALESCE(dt.daily_revenuecat_total, 0) AS revenuecat_revenue,\r\n  --COALESCE(dt.daily_revenuecat_count, 0) AS revenuecat_transactions,\r\n  \r\n  -- Subscription gelirleri\r\n  --COALESCE(dt.daily_subscription_started_total, 0) AS subscription_started_revenue,\r\n  --COALESCE(dt.daily_subscription_started_count, 0) AS subscription_started_count,\r\n  --COALESCE(dt.daily_subscription_renewed_total, 0) AS subscription_renewed_revenue,\r\n  --COALESCE(dt.daily_subscription_renewed_count, 0) AS subscription_renewed_count,\r\n  \r\n  -- Refund bilgileri\r\n  --COALESCE(dt.daily_refund_amount, 0) AS refund_amount,\r\n  --COALESCE(dt.daily_refund_count, 0) AS refund_count,\r\n  \r\n  -- Toplam işlem sayısı\r\n  COALESCE(dt.daily_revenuecat_count, 0) AS rc\r\n  --COALESCE(dt.daily_subscription_started_count, 0) + \r\n  --COALESCE(dt.daily_subscription_renewed_count, 0) + \r\n  --COALESCE(dt.daily_refund_count, 0) AS total_transactions\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalRevenueUsd",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "purple"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 8,
+          "y": 24
+        },
+        "id": 26,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^C$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_scenarios.mp_master_event`\r\nWHERE $__timeFilter(time)\r\nAND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "home-ai-7bf66",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$B/$A",
+            "hide": false,
+            "refId": "C",
+            "type": "math"
+          }
+        ],
+        "title": "İndirme Başına Gelir",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "description": "",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds",
+              "seriesBy": "last"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "left",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 81,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineStyle": {
+                "fill": "solid"
+              },
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#6c35f1"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_duration_ms"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "ms"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "practice_count"
+              },
+              "properties": [
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "unit",
+                  "value": ""
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "avg_duration_ms"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "ms"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        },
+        "id": 23,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": false
+          },
+          "tooltip": {
+            "hideZeros": true,
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "-- Günlük actualDurationMs ortalaması (Time Series sorgusu)\r\nWITH all_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(1753462968542)),\r\n      DATE(TIMESTAMP_MILLIS(1756054968542))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_practice_data AS (\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS practice_count,\r\n  FROM `lingua-live-heop94.mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'SessionInitiated'\r\n  GROUP BY event_date\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dpd.practice_count, 0) AS practice_count,\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_practice_data dpd ON adr.day = dpd.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Yapılan Pratik",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 0,
+          "y": 27
+        },
+        "id": 21,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "normal",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Continuous Revenue Panel - Kesintisiz Gelir Takibi\r\n-- Önce rc_initial_purchase_event, rc_trial_converted_event kontrol eder\r\n-- Yoksa subscription_started'den alır\r\n-- Kesintisiz revenue takibi sağlar\r\n\r\nWITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day\r\n  FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_revenue_data AS (\r\n  -- Günlük toplam geliri hesapla - öncelik sırasına göre\r\n  SELECT\r\n    DATE(time) AS event_date,\r\n    -- Önce rc eventlerinden revenue al\r\n    ROUND(SUM(\r\n      CASE \r\n        WHEN event_name IN ('rc_initial_purchase_event', 'rc_trial_converted_event')\r\n             AND REGEXP_CONTAINS(TO_JSON_STRING(properties), r'\"revenue\"')\r\n             AND CAST(REGEXP_EXTRACT(TO_JSON_STRING(properties), r'\"revenue\":([0-9.]+)') AS FLOAT64) > 0\r\n        THEN CAST(REGEXP_EXTRACT(TO_JSON_STRING(properties), r'\"revenue\":([0-9.]+)') AS FLOAT64)\r\n        -- Eğer rc eventi yoksa subscription_started'den al\r\n        WHEN event_name = 'subscription_started'\r\n             AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n        THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n        -- subscription_renewed'den de al\r\n        WHEN event_name = 'subscription_renewed'\r\n             AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n        THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n        ELSE 0 \r\n      END\r\n    ), 2) AS daily_revenue_usd,\r\n    \r\n    -- Event türlerini say\r\n    SUM(CASE WHEN event_name IN ('rc_initial_purchase_event', 'rc_trial_converted_event') THEN 1 ELSE 0 END) AS rc_event_count,\r\n    SUM(CASE WHEN event_name = 'subscription_started' THEN 1 ELSE 0 END) AS subscription_started_count,\r\n    SUM(CASE WHEN event_name = 'subscription_renewed' THEN 1 ELSE 0 END) AS subscription_renewed_count,\r\n    \r\n    MAX(time) AS last_event_time\r\n\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('rc_initial_purchase_event', 'rc_trial_converted_event', 'subscription_started', 'subscription_renewed')\r\n  GROUP BY event_date\r\n),\r\ndaily_refund_data AS (\r\n  -- Refund verilerini ayrı hesapla\r\n  SELECT\r\n    DATE(time) AS event_date,\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n    SUM(CASE WHEN event_name = 'subscription_refunded' THEN 1 ELSE 0 END) AS refund_count\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name = 'subscription_refunded'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, gelir olmayan günlerde 0 değeri ver\r\nSELECT\r\n  -- Her gün için sabit zaman (23:59:59) - Grafana uyumlu\r\n  TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59))) AS time,\r\n  \r\n  -- Toplam günlük revenue (refund dahil)\r\n  ROUND(\r\n    COALESCE(drd.daily_revenue_usd, 0) + \r\n    COALESCE(dref.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n  \r\n  -- Detaylı bilgiler\r\n  --COALESCE(drd.daily_revenue_usd, 0) AS gross_revenue,\r\n  --COALESCE(dref.daily_refund_amount, 0) AS refund_amount,\r\n  --COALESCE(drd.rc_event_count, 0) AS rc_event_count,\r\n  --COALESCE(drd.subscription_started_count, 0) AS subscription_started_count,\r\n  --COALESCE(drd.subscription_renewed_count, 0) AS subscription_renewed_count,\r\n  --COALESCE(dref.refund_count, 0) AS refund_count\r\n\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_revenue_data drd ON adr.day = drd.event_date\r\nLEFT JOIN daily_refund_data dref ON adr.day = dref.event_date\r\nORDER BY time ASC;\r\n\r\n",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Revenue",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#3888ff",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 6,
+          "y": 27
+        },
+        "id": 22,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "aexutu9h8wohsa"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "-- 📊 $ae_first_app_open_date Analysis Query for Grafana\r\n-- Bu sorgu ilk uygulama açılış tarihlerini analiz eder\r\n\r\n-- 🎯 Query 1: Daily First App Opens (Time Series)\r\nWITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük ilk açılış event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_scenarios.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = '$ae_first_open'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "FirstAppOpen",
+        "type": "barchart"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
+        "id": 28,
+        "panels": [],
+        "title": "Notebase",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 0,
+          "y": 33
+        },
+        "id": 29,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE $__timeFilter(time)\r\n  AND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalFirstOpen",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 4,
+          "y": 33
+        },
+        "id": 30,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^total_daily_revenue$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "TotalRevenueUsd",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "purple"
+                }
+              ]
+            },
+            "unit": "currencyUSD"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 8,
+          "y": 33
+        },
+        "id": 31,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "percentChangeColorMode": "standard",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "/^C$/",
+            "values": false
+          },
+          "showPercentChange": false,
+          "text": {},
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "SELECT \r\n  COUNT(*) AS total_downloads\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE $__timeFilter(time)\r\nAND event_name = '$ae_first_open';",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "hide": false,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "B",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          },
+          {
+            "datasource": {
+              "name": "Expression",
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "expression": "$B/$A",
+            "hide": false,
+            "refId": "C",
+            "type": "math"
+          }
+        ],
+        "title": "İndirme Başına Gelir",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds",
+              "seriesBy": "last"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "left",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 81,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineStyle": {
+                "fill": "solid"
+              },
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "#6c35f1"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 33
+        },
+        "id": 32,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": false
+          },
+          "tooltip": {
+            "hideZeros": true,
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Note Created Daily Analysis Query for Grafana\r\n-- Bu sorgu note_created eventinin günlük çağrılma sayısını analiz eder\r\n\r\n-- 🎯 Query 1: Daily Note Created Count (Time Series) - Fixed\r\nWITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_note_created AS (\r\n  -- Günlük note_created event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS note_created_count,\r\n    MAX((time)) AS last_event_time\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter((time))\r\n    AND event_name = 'note_created'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  -- Her gün için sabit zaman (23:59:59) - Grafana uyumlu\r\n  TIMESTAMP(DATETIME(adr.day, TIME(23, 59, 59))) AS time,\r\n  COALESCE(dnc.note_created_count, 0) AS daily_note_created_count\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_note_created dnc ON adr.day = dnc.event_date\r\nORDER BY time ASC;\r\n\r\n-- 🎯 Query 2: Sadece Bugünün Değeri (Stat Panel için)\r\n/*\r\nSELECT \r\n  COUNT(*) AS today_note_created_count\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE DATE((time)) = CURRENT_DATE()\r\n  AND event_name = 'note_created';\r\n*/\r\n\r\n-- 🎯 Query 3: Bugünün Gerçek Zamanlı Değeri (Time Series)\r\n/*\r\nSELECT \r\n  (time) AS time,\r\n  COUNT(*) OVER (ORDER BY DATE((time))) AS cumulative_today_note_created\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE DATE((time)) = CURRENT_DATE()\r\n  AND event_name = 'note_created'\r\nORDER BY (time) ASC;\r\n*/\r\n\r\n-- 🎯 Query 4: Note Created by User (Table)\r\n/*\r\nSELECT \r\n  user_id,\r\n  COUNT(*) AS note_count,\r\n  MIN((time)) AS first_note_time,\r\n  MAX((time)) AS last_note_time\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE $__timeFilter((time))\r\n  AND event_name = 'note_created'\r\nGROUP BY user_id\r\nORDER BY note_count DESC\r\nLIMIT 50;\r\n*/\r\n\r\n-- 🎯 Query 5: Note Created Properties Analysis (Table)\r\n/*\r\nSELECT \r\n  JSON_EXTRACT_SCALAR(properties, '$.note_type') AS note_type,\r\n  COUNT(*) AS count,\r\n  COUNT(*) * 100.0 / SUM(COUNT(*)) OVER() AS percentage\r\nFROM `mixpanel_notebase.mp_master_event`\r\nWHERE $__timeFilter((time))\r\n  AND event_name = 'note_created'\r\n  AND JSON_EXTRACT_SCALAR(properties, '$.note_type') IS NOT NULL\r\nGROUP BY note_type\r\nORDER BY count DESC;\r\n*/\r\n\r\n-- 📝 Kullanım Notları:\r\n-- 1. Ana query: Günlük note_created sayılarını time series olarak gösterir (her gün için tek değer)\r\n-- 2. Query 2: Sadece bugünün toplam değerini gösterir (Stat Panel için)\r\n-- 3. Query 3: Bugünün gerçek zamanlı kümülatif değerini gösterir\r\n-- 4. Query 4: Kullanıcı bazında note oluşturma analizi\r\n-- 5. Query 5: Note türlerine göre dağılım analizi\r\n\r\n-- 🔍 Veri Yapısı:\r\n-- event_name: \"note_created\"\r\n-- properties: JSON formatında note bilgileri\r\n-- time: Event zamanı (timestamp)\r\n\r\n-- 🔧 Özellikler:\r\n-- Zaman damgası her gün için 23:59:59 olarak ayarlandı\r\n-- Bu sayede her gün için tek bir değer gösterilir\r\n-- Aynı gün içinde birden fazla değer döndürme sorunu çözüldü\r\n-- Grafana uyumlu hale getirildi\r\n\r\n-- 📊 Panel Önerileri:\r\n-- 1. Time Series Panel: Ana query ile günlük trend\r\n-- 2. Stat Panel: Query 2 ile bugünün toplamı\r\n-- 3. Table Panel: Query 4 ile kullanıcı analizi\r\n-- 4. Pie Chart: Query 5 ile note türü dağılımı\r\n",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "NoteGenerate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 0,
+          "y": 36
+        },
+        "id": 33,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "note-shot-ajguea",
+            "rawQuery": true,
+            "rawSql": "WITH daily_totals AS (\r\n  SELECT\r\n    DATE((time)) AS event_date,\r\n    \r\n    -- Başlayan abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_started_total,\r\n    \r\n    -- Başlayan aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_started' \r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END -- Sadece koşul sağlandığında saymak için 1, aksi halde NULL\r\n    ) AS daily_subscription_started_count,\r\n\r\n    -- Yenilenen abonelikler için toplam gelir\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_subscription_renewed_total,\r\n\r\n    -- Yenilenen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_renewed'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_subscription_renewed_count,\r\n    \r\n    -- İade edilen abonelikler için toplam tutar (negatif olabilir)\r\n    ROUND(SUM(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN CAST(JSON_EXTRACT_SCALAR(properties, '$.price_usd') AS FLOAT64)\r\n      ELSE 0 END\r\n    ), 2) AS daily_refund_amount,\r\n\r\n    -- İade edilen aboneliklerin sayısı\r\n    COUNT(\r\n      CASE WHEN event_name = 'subscription_refunded'\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.price_usd') IS NOT NULL\r\n           AND JSON_EXTRACT_SCALAR(properties, '$.mp_lib') IS NOT NULL\r\n      THEN 1 ELSE NULL END\r\n    ) AS daily_refund_count,\r\n    \r\n    MAX((time)) AS last_event_time\r\n\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE $__timeFilter(time)\r\n    AND event_name IN ('subscription_started', 'subscription_renewed', 'subscription_renewal_cancelled', 'subscription_refunded')\r\n  GROUP BY event_date\r\n),\r\nall_days_in_range AS (\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(${__from:milli})),\r\n      DATE(TIMESTAMP_MILLIS(${__to:milli}))\r\n    )\r\n  ) AS day\r\n)\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  \r\n  ROUND(\r\n    COALESCE(dt.daily_subscription_started_total, 0) + \r\n    COALESCE(dt.daily_subscription_renewed_total, 0) + \r\n    COALESCE(dt.daily_refund_amount, 0), 2\r\n  ) AS total_daily_revenue,\r\n\r\n  \r\n  --COALESCE(dt.daily_subscription_started_count, 0) AS daily_subscription_started_count,\r\n  --COALESCE(dt.daily_subscription_renewed_count, 0) AS daily_subscription_renewed_count,\r\n  --COALESCE(dt.daily_refund_count, 0) AS daily_refund_count\r\n \r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_totals dt ON adr.day = dt.event_date\r\nORDER BY time ASC;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Revenue",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "datasource",
+          "uid": "-- Mixed --"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#3888ff",
+              "mode": "fixed"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisGridShow": false,
+              "axisLabel": "",
+              "axisPlacement": "hidden",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 0,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 6,
+          "y": 36
+        },
+        "id": 38,
+        "options": {
+          "barRadius": 0.35,
+          "barWidth": 0.82,
+          "colorByField": "time",
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "orientation": "auto",
+          "showValue": "never",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 300
+        },
+        "pluginVersion": "11.6.5",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-bigquery-datasource",
+              "uid": "bexutmsl7e8zkd"
+            },
+            "editorMode": "code",
+            "format": 1,
+            "location": "",
+            "project": "lingua-live-heop94",
+            "rawQuery": true,
+            "rawSql": "-- 📊 Notebase $ae_first_open Daily Panel Query for Grafana\r\n-- Bu sorgu notebase uygulaması için günlük ilk açılış eventlerini analiz eder\r\n-- Grafana SQL Rules'a %100 uyumlu\r\n\r\n-- 🎯 Daily First App Opens (Time Series Panel için)\r\nWITH all_days_in_range AS (\r\n  -- Grafana'dan seçilen tarih aralığındaki tüm günleri oluştur\r\n  SELECT day FROM UNNEST(\r\n    GENERATE_DATE_ARRAY(\r\n      DATE(TIMESTAMP_MILLIS(1754097099489)),\r\n      DATE(TIMESTAMP_MILLIS(1756689099489))\r\n    )\r\n  ) AS day\r\n),\r\ndaily_first_opens AS (\r\n  -- Günlük $ae_first_open event sayılarını hesapla\r\n  SELECT \r\n    DATE((time)) AS event_date,\r\n    COUNT(*) AS first_open_count\r\n  FROM `mixpanel_notebase.mp_master_event`\r\n  WHERE (time) >= '2025-08-02T01:11:39Z' AND (time) <= '2025-09-01T01:11:39Z'\r\n    AND event_name = 'app-install'\r\n  GROUP BY event_date\r\n)\r\n-- Tüm günleri göster, event olmayan günlerde 0 değeri ver\r\nSELECT \r\n  TIMESTAMP(adr.day) AS time,\r\n  COALESCE(dfo.first_open_count, 0) AS daily_first_opens\r\nFROM all_days_in_range adr\r\nLEFT JOIN daily_first_opens dfo ON adr.day = dfo.event_date\r\nORDER BY time ASC;\r\n\r\n-- 📝 Grafana Panel Ayarları:\r\n-- Panel Type: Time series\r\n-- Query Type: Time series\r\n-- Time field: time\r\n-- Value field: daily_first_opens\r\n\r\n-- 🔍 Veri Yapısı (Notebase):\r\n-- Table: mixpanel_notebase.mp_master_event\r\n-- Event name: \"$ae_first_open\"\r\n-- Time field: time (milliseconds timestamp)\r\n-- Properties: JSON string içinde $ae_first_app_open_date bilgisi\r\n\r\n-- ⚡ Performans Optimizasyonları:\r\n-- ✅ TIMESTAMP_MILLIS(time) >= '2025-08-02T01:11:39Z' AND TIMESTAMP_MILLIS(time) <= '2025-09-01T01:11:39Z' kullanıldı\r\n-- ✅ GENERATE_DATE_ARRAY ile Grafana tarih aralığı kullanıldı\r\n-- ✅ LEFT JOIN ile eksik günler 0 olarak gösteriliyor\r\n-- ✅ JSON extraction sadece gerekli yerde yapılıyor\r\n\r\n-- 📊 Beklenen Çıktı:\r\n-- Her gün için timestamp ve o günkü toplam $ae_first_open sayısı\r\n-- Eksik günlerde 0 değeri gösterilir\r\n-- Grafana'nın seçtiği tarih aralığı tam olarak uygulanır\r\n\r\n-- 🎯 Grafana SQL Rules Compliance:\r\n-- ✅ 1754097099489 ve 1756689099489 kullanıldı\r\n-- ✅ time >= '2025-08-02T01:11:39Z' AND time <= '2025-09-01T01:11:39Z' WHERE clause'da mevcut\r\n-- ✅ COALESCE(..., 0) ile NULL handling yapıldı\r\n-- ✅ TIMESTAMP() formatı time series için kullanıldı\r\n-- ✅ ORDER BY time ASC eklendi\r\n-- ✅ Time series şablonu kullanıldı",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "FirstAppOpen",
+        "type": "barchart"
+      }
+    ],
+    "preload": false,
+    "schemaVersion": 41,
+    "tags": [],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "15m"
+      ]
+    },
+    "timezone": "browser",
+    "title": "All Ancienda---",
+    "uid": "fevbq0xhn57ggc",
+    "version": 82
+  }
