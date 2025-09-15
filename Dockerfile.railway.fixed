@@ -1,0 +1,25 @@
+FROM grafana/grafana:latest
+
+# Install curl for health checks
+USER root
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+USER grafana
+
+# Expose the port
+EXPOSE 3000
+
+# Set environment variables for Railway
+ENV GF_SERVER_HTTP_PORT=${PORT:-3000}
+ENV GF_SECURITY_ADMIN_USER=admin
+ENV GF_SECURITY_ADMIN_PASSWORD=Admin123
+ENV GF_SECURITY_SECRET_KEY=MySecretKey12345
+ENV GF_ANALYTICS_REPORTING_ENABLED=false
+ENV GF_ANALYTICS_CHECK_FOR_UPDATES=false
+ENV GF_LOG_LEVEL=info
+ENV GF_DATABASE_TYPE=sqlite3
+ENV GF_SERVER_ENABLE_GZIP=true
+ENV GF_USERS_ALLOW_SIGN_UP=false
+ENV GF_AUTH_ANONYMOUS_ENABLED=false
+
+# Use the standard Grafana entrypoint
+CMD ["grafana-server", "--homepath=/usr/share/grafana", "--config=/etc/grafana/grafana.ini"]
