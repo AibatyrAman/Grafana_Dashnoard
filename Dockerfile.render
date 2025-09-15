@@ -9,7 +9,7 @@ COPY grafana/dashboards/ /var/lib/grafana/dashboards/
 EXPOSE 3000
 
 # Render PORT environment variable'ını kullan
-ENV GF_SERVER_HTTP_PORT=3000
+ENV GF_SERVER_HTTP_PORT=3001
 ENV GF_SERVER_DOMAIN=${RENDER_EXTERNAL_URL}
 ENV GF_SERVER_ROOT_URL=${RENDER_EXTERNAL_URL}
 
